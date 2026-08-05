@@ -1,0 +1,272 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum TransactionType {
+  RECEITA
+  DESPESA
+  TRANSFERENCIA
+}
+
+enum AccountType {
+  CONTA_CORRENTE
+  CONTA_POUPANCA
+  CONTA_SALARIO
+}
+
+enum SourceType {
+  MANUAL
+  TEXTO
+  OFX
+  CSV
+  PDF
+  OPEN_FINANCE
+}
+
+enum TransactionStatus {
+  PENDENTE
+  CONFIRMADA
+  EXCLUIDA
+}
+
+enum InvestmentType {
+  RENDA_FIXA
+  RENDA_VARIAVEL
+  FUNDO
+  CRIPTO
+  OUTRO
+}
+
+enum InvestmentTransactionType {
+  APORTE
+  RESGATE
+  RENDIMENTO
+  TAXA
+}
+
+enum BillStatus {
+  PENDENTE
+  PAGO
+  CANCELADA
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+
+  accounts              Account[]
+  creditCards           CreditCard[]
+  investments           Investment[]
+  categories            Category[]
+  ofConsents            OFConsent[]
+  ofConnections         OFConnection[]
+  bills                 Bill[]
+}
+
+model Category {
+  id       String          @id @default(cuid())
+  userId   String?
+  user     User?           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name     String
+  type     TransactionType @default(DESPESA)
+  icon     String?
+  color    String?
+  isSystem Boolean         @default(false)
+
+  transactions        Transaction[]
+  creditCardTransactions CreditCardTransaction[]
+
+  @@unique([userId, name])
+}
+
+model Bank {
+  id    String  @id @default(cuid())
+  code  String  @unique
+  name  String
+  logo  String?
+
+  accounts    Account[]
+  creditCards CreditCard[]
+  bills       Bill[]
+}
+
+model Account {
+  id             String      @id @default(cuid())
+  userId         String
+  user           User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bankId         String?
+  bank           Bank?       @relation(fields: [bankId], references: [id])
+  name           String
+  number         String?
+  agency         String?
+  type           AccountType @default(CONTA_CORRENTE)
+  openingBalance Decimal     @default(0) @db.Decimal(15, 2)
+  currency       String      @default("BRL")
+  order          Int         @default(0)
+
+  createdAt    DateTime      @default(now())
+  statements   Statement[]
+  transactions Transaction[]
+  bills        Bill[]
+}
+
+model Statement {
+  id            String     @id @default(cuid())
+  accountId     String
+  account       Account    @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  period        String
+  openingBalance Decimal?  @db.Decimal(15, 2)
+  closingBalance Decimal?  @db.Decimal(15, 2)
+  source        SourceType @default(MANUAL)
+  createdAt     DateTime   @default(now())
+
+  transactions Transaction[]
+}
+
+model Transaction {
+  id          String            @id @default(cuid())
+  statementId String?
+  statement   Statement?        @relation(fields: [statementId], references: [id], onDelete: SetNull)
+  accountId   String
+  account     Account           @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  date        DateTime
+  amount      Decimal           @db.Decimal(15, 2)
+  description String
+  type        TransactionType
+  categoryId  String?
+  category    Category?         @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  status      TransactionStatus @default(PENDENTE)
+  currency    String            @default("BRL")
+  rawText     String?
+  externalId  String?
+  createdAt   DateTime          @default(now())
+
+  @@unique([accountId, date, amount, description])
+}
+
+model CreditCard {
+  id              String @id @default(cuid())
+  userId          String
+  user            User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bankId          String?
+  bank            Bank?  @relation(fields: [bankId], references: [id])
+  name            String
+  lastDigits      String?
+  closingDay      Int
+  dueDay          Int
+  bestPurchaseDay Int?
+  limit           Decimal? @db.Decimal(15, 2)
+  currency        String @default("BRL")
+
+  createdAt DateTime @default(now())
+  statements CreditCardStatement[]
+  transactions CreditCardTransaction[]
+}
+
+model CreditCardStatement {
+  id          String   @id @default(cuid())
+  cardId      String
+  card        CreditCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  competence  String
+  total       Decimal  @db.Decimal(15, 2)
+  previousBalance Decimal @default(0) @db.Decimal(15, 2)
+  paid        Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  transactions CreditCardTransaction[]
+
+  @@unique([cardId, competence])
+}
+
+model CreditCardTransaction {
+  id            String            @id @default(cuid())
+  statementId   String?
+  statement     CreditCardStatement? @relation(fields: [statementId], references: [id], onDelete: SetNull)
+  cardId        String
+  card          CreditCard        @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  purchaseDate  DateTime
+  amount        Decimal           @db.Decimal(15, 2)
+  description   String
+  categoryId    String?
+  category      Category?         @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  installments  Int               @default(1)
+  installmentCurrent Int          @default(1)
+  isDebt        Boolean           @default(false)
+  currency      String            @default("BRL")
+  createdAt     DateTime          @default(now())
+
+  @@unique([cardId, purchaseDate, amount, description])
+}
+
+model Investment {
+  id           String         @id @default(cuid())
+  userId       String
+  user         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  institution  String
+  name         String
+  type         InvestmentType @default(RENDA_FIXA)
+  openingBalance Decimal      @default(0) @db.Decimal(15, 2)
+  currency     String         @default("BRL")
+  createdAt    DateTime       @default(now())
+
+  transactions InvestmentTransaction[]
+}
+
+model InvestmentTransaction {
+  id           String                    @id @default(cuid())
+  investmentId String
+  investment   Investment                @relation(fields: [investmentId], references: [id], onDelete: Cascade)
+  date         DateTime
+  type         InvestmentTransactionType
+  amount       Decimal                   @db.Decimal(15, 2)
+  quantity     Decimal?                  @db.Decimal(20, 10)
+  unitPrice    Decimal?                  @db.Decimal(15, 4)
+  createdAt    DateTime                  @default(now())
+}
+
+model OFConsent {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status    String   @default("PENDING")
+  consentId String?
+  scopes    String
+  validUntil DateTime?
+  createdAt DateTime @default(now())
+}
+
+model OFConnection {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountId     String?
+  institutionId String
+  status        String   @default("ACTIVE")
+  lastSync      DateTime?
+  createdAt     DateTime @default(now())
+}
+
+model Bill {
+  id           String     @id @default(cuid())
+  userId       String
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name         String
+  dueDate      DateTime
+  amount       Decimal    @db.Decimal(15, 2)
+  status       BillStatus @default(PENDENTE)
+  paidAt       DateTime?
+  paidBankId   String?
+  paidBank     Bank?      @relation(fields: [paidBankId], references: [id])
+  paidAccountId String?
+  paidAccount  Account?   @relation(fields: [paidAccountId], references: [id])
+  createdAt    DateTime   @default(now())
+}
