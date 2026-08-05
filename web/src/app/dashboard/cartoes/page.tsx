@@ -154,11 +154,12 @@ export default async function CardsPage() {
                       <button className="rounded bg-slate-900 px-3 py-1.5 text-white">
                         Salvar
                       </button>
-                      <form action={deleteCard.bind(null, card.id)}>
-                        <button className="rounded border border-red-200 px-3 py-1.5 text-red-600">
-                          Excluir
-                        </button>
-                      </form>
+                      <button
+                        formAction={deleteCard.bind(null, card.id)}
+                        className="rounded border border-red-200 px-3 py-1.5 text-red-600"
+                      >
+                        Excluir
+                      </button>
                     </div>
                   </form>
                   <p className="mt-3 text-xs text-slate-500">
